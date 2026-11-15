@@ -65,6 +65,9 @@ export interface Project {
   exportScale: number;
   exportFps: number;
   exportBitrateMbps: number;
+  /** 'bitrate' uses exportBitrateMbps; 'target' derives the bitrate from exportTargetMB. */
+  exportSizeMode: 'bitrate' | 'target';
+  exportTargetMB: number;
 }
 
 export const CANVAS_PRESETS = [
@@ -108,6 +111,8 @@ const defaults: Project = {
   exportScale: 1,
   exportFps: 60,
   exportBitrateMbps: 20,
+  exportSizeMode: 'bitrate',
+  exportTargetMB: 8,
 };
 
 export const MIN_TRIM = 0.1;

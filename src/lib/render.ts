@@ -41,6 +41,21 @@ export interface RenderResult {
 
 const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
+/** Lowest bitrate worth asking an encoder for; below this most encoders refuse or ignore the value. */
+export const MIN_BITRATE = 50_000;
+
+/**
+ * Video bitrate (bits/second) that makes a `seconds` long export land just under `targetBytes`.
+ * The export has no audio, so the budget is the target minus container overhead (headers and the
+ * per-frame index) and a margin for encoders that run a little over the bitrate they are given.
+ */
+export function bitrateForTargetSize(targetBytes: number, seconds: number, fps: number): number {
+  const frames = Math.max(1, Math.round(seconds * fps));
+  const overhead = 2000 + frames * 16;
+  const budget = Math.max(0, targetBytes - overhead) * 0.95;
+  return Math.max(MIN_BITRATE, Math.round((budget * 8) / Math.max(seconds, 0.01)));
+}
+
 /** Picks H.264/MP4 when the browser can encode it, otherwise falls back to WebM. */
 export async function pickOutputCodec(width: number, height: number, bitrate: number): Promise<RenderResult['codec'] | null> {
   for (const codec of ['avc', 'vp9', 'vp8'] as const) {
