@@ -65,6 +65,10 @@ export interface Project {
   exportScale: number;
   exportFps: number;
   exportBitrateMbps: number;
+  exportFormat: 'video' | 'gif';
+  /** GIFs get their own size and frame rate: full-size 60fps would be enormous. */
+  gifScale: number;
+  gifFps: number;
 }
 
 export const CANVAS_PRESETS = [
@@ -108,6 +112,9 @@ const defaults: Project = {
   exportScale: 1,
   exportFps: 60,
   exportBitrateMbps: 20,
+  exportFormat: 'video',
+  gifScale: 0.5,
+  gifFps: 20,
 };
 
 export const MIN_TRIM = 0.1;

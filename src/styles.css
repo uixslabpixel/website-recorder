@@ -994,7 +994,9 @@ progress::-moz-progress-bar {
   padding-top: 8px;
   border-top: 1px solid var(--line);
 }
-.result video {
+.result video,
+.result img {
+  display: block;
   width: 100%;
   border-radius: var(--r);
   background: #000;

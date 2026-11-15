@@ -5,7 +5,7 @@ import { saveFile } from '../lib/env';
 import { formatBytes } from '../lib/media';
 import { renderProject, type RenderResult } from '../lib/render';
 import { useProject } from '../store';
-import { Icon, Notice, Num, Row, useDismiss } from './controls';
+import { Icon, Notice, Num, Row, Segmented, useDismiss } from './controls';
 
 const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
@@ -23,6 +23,7 @@ export function ExportPanel() {
   useEffect(() => () => void (result && URL.revokeObjectURL(result.url)), [result]);
 
   const length = keptLength(p.trim, p.cuts);
+  const gif = p.exportFormat === 'gif';
 
   const render = async () => {
     const video = getVideo(p.recording?.assetId);
@@ -39,8 +40,9 @@ export function ExportPanel() {
         video: video.blob,
         trim: p.trim,
         cuts: p.cuts,
-        scale: p.exportScale,
-        fps: p.exportFps,
+        format: p.exportFormat,
+        scale: gif ? p.gifScale : p.exportScale,
+        fps: gif ? p.gifFps : p.exportFps,
         bitrate: p.exportBitrateMbps * 1e6,
         onProgress: setProgress,
         signal: abortRef.current.signal,
@@ -72,8 +74,16 @@ export function ExportPanel() {
       </button>
       {open && (
         <div className="popover export" role="dialog" aria-label="Export">
+          <Segmented
+            value={p.exportFormat}
+            options={[
+              { value: 'video', label: 'MP4' },
+              { value: 'gif', label: 'GIF' },
+            ]}
+            onChange={(exportFormat) => p.set({ exportFormat })}
+          />
           <Row label="Size">
-            <select value={p.exportScale} onChange={(e) => p.set({ exportScale: Number(e.target.value) })}>
+            <select value={gif ? p.gifScale : p.exportScale} onChange={(e) => p.set(gif ? { gifScale: Number(e.target.value) } : { exportScale: Number(e.target.value) })}>
               {[1, 0.75, 0.5, 0.25].map((s) => (
                 <option key={s} value={s}>
                   {even(p.canvas.width * s)}×{even(p.canvas.height * s)}
@@ -82,15 +92,29 @@ export function ExportPanel() {
               ))}
             </select>
           </Row>
-          <Row label="Frame rate">
-            <select value={p.exportFps} onChange={(e) => p.set({ exportFps: Number(e.target.value) })}>
-              <option value={60}>60 fps</option>
-              <option value={30}>30 fps</option>
-            </select>
-          </Row>
-          <Row label="Bitrate" tip="Higher is sharper, and a bigger file.">
-            <Num value={p.exportBitrateMbps} min={1} max={100} suffix="Mbps" onChange={(exportBitrateMbps) => p.set({ exportBitrateMbps })} />
-          </Row>
+          {gif ? (
+            <Row label="Frame rate" tip="GIFs are limited to 256 colours and grow fast. Smaller size and fewer frames keep the file light.">
+              <select value={p.gifFps} onChange={(e) => p.set({ gifFps: Number(e.target.value) })}>
+                {[25, 20, 12.5, 10].map((f) => (
+                  <option key={f} value={f}>
+                    {f} fps
+                  </option>
+                ))}
+              </select>
+            </Row>
+          ) : (
+            <>
+              <Row label="Frame rate">
+                <select value={p.exportFps} onChange={(e) => p.set({ exportFps: Number(e.target.value) })}>
+                  <option value={60}>60 fps</option>
+                  <option value={30}>30 fps</option>
+                </select>
+              </Row>
+              <Row label="Bitrate" tip="Higher is sharper, and a bigger file.">
+                <Num value={p.exportBitrateMbps} min={1} max={100} suffix="Mbps" onChange={(exportBitrateMbps) => p.set({ exportBitrateMbps })} />
+              </Row>
+            </>
+          )}
 
           {busy ? (
             <div className="progress">
@@ -104,7 +128,7 @@ export function ExportPanel() {
               {result ? 'Render again' : 'Render'}
               {p.recording && (
                 <span className="meta">
-                  {length.toFixed(1)}s · ~{formatBytes((p.exportBitrateMbps * 1e6 * length) / 8)}
+                  {length.toFixed(1)}s{gif ? '' : ` · ~${formatBytes((p.exportBitrateMbps * 1e6 * length) / 8)}`}
                 </span>
               )}
             </button>
@@ -113,8 +137,8 @@ export function ExportPanel() {
           {error && <Notice tone="error">{error}</Notice>}
           {result && !busy && (
             <div className="result">
-              <video src={result.url} controls loop muted playsInline />
-              {result.extension !== 'mp4' && <Notice tone="warn">No H.264 encoder in this browser, so this is WebM.</Notice>}
+              {result.extension === 'gif' ? <img src={result.url} alt="Rendered GIF" /> : <video src={result.url} controls loop muted playsInline />}
+              {result.extension === 'webm' && <Notice tone="warn">No H.264 encoder in this browser, so this is WebM.</Notice>}
               <button
                 type="button"
                 className="accent wide"

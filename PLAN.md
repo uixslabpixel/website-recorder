@@ -66,7 +66,7 @@ Semua jalan di browser dan bisa di-host sebagai static site.
 
 ## Status
 
-Milestone 1–4 sudah diimplementasikan, plus bagian "compress" dari P2 (pilihan ukuran export 75/50/25% dan bitrate). GIF dan custom cursor + visualisasi click belum.
+Milestone 1–4 sudah diimplementasikan, plus dari P2: "compress" (pilihan ukuran export 75/50/25% dan bitrate) dan export GIF (palet global 255 warna, ordered dithering, piksel yang tidak berubah ditulis transparan; default 50% ukuran canvas, 20fps). Yang belum: custom cursor + visualisasi click, karena butuh extension pendamping.
 
 Temuan spike capture (Chromium, diuji otomatis lewat Playwright):
 
