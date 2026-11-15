@@ -1,0 +1,41 @@
+# Website Recorder
+
+Record an interaction on any website, frame it on a background, and export a Dribbble-ready video. Everything runs in the browser: no login, no backend, no uploads. See [PLAN.md](PLAN.md) for the design.
+
+## Run
+
+```bash
+npm install
+npm run dev
+```
+
+`npm run build` produces a static site in `dist/` that can be hosted anywhere. Use Chrome or Edge on desktop.
+
+## How it works
+
+1. **Setup** – enter a URL, viewport (default 1680×900) and duration (default 5s).
+2. **Open website** – the site opens in a popup sized to the viewport. Get it into the state you want.
+3. **Record** – pick the popup under *Tab* in the browser's share dialog. After a 3-2-1 countdown the popup comes to the front and is recorded for the set duration, then closes.
+4. **Edit** – canvas size (Dribbble 4:3 by default), solid/gradient/image background, recording scale/position/radius/shadow, extra image layers with ordering. Drag layers on the canvas.
+5. **Trim** – drag the timeline handles; only in/out points are stored.
+6. **Export** – frames are composited and encoded with WebCodecs to H.264 MP4 at 60fps. Size can be reduced (75/50/25%) and bitrate adjusted.
+
+An existing video file can be imported instead of recording. The project (settings, recording, images) is saved locally in the browser and survives a refresh.
+
+## Code map
+
+| Path | Role |
+|---|---|
+| `src/lib/capture.ts` | Popup, `getDisplayMedia`, `MediaRecorder`, capture warnings |
+| `src/lib/media.ts` | Remux the raw recording into a seekable file, read duration/size |
+| `src/lib/compositor.ts` | Draws one frame; shared by the preview and the export |
+| `src/lib/render.ts` | Decode → composite → encode → mux (Mediabunny + WebCodecs) |
+| `src/lib/assets.ts` | Recording and image blobs in IndexedDB |
+| `src/store.ts` | Project state (Zustand, persisted to localStorage) |
+
+## Known limits
+
+- The browser's tab picker appears for every recording and cannot be skipped.
+- The popup cannot be larger than the screen; the app warns and offers "Fit to screen".
+- **Hide cursor** is a request the browser may ignore. In testing, Chromium did not honor it for tab capture; the app warns when that happens.
+- Not built yet (P2 in the plan): GIF export, custom cursor and click visualisation (needs a companion extension).

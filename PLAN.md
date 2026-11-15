@@ -64,6 +64,18 @@ Semua jalan di browser dan bisa di-host sebagai static site.
 4. **Polish:** simpan project lokal, preset canvas, error state (izin ditolak, popup diblokir, viewport melebihi layar).
 5. **P2:** compress, GIF, custom cursor + visualisasi click.
 
+## Status
+
+Milestone 1–4 sudah diimplementasikan, plus bagian "compress" dari P2 (pilihan ukuran export 75/50/25% dan bitrate). GIF dan custom cursor + visualisasi click belum.
+
+Temuan spike capture (Chromium, diuji otomatis lewat Playwright):
+
+- Popup + tab capture + rekam + render MP4 berjalan end-to-end; tab terekam pada ukuran aslinya (viewport × device pixel ratio).
+- Constraint `width`/`height` di `getDisplayMedia` membuat Chrome mengubah skala hasil capture, jadi tidak dipakai.
+- Opsi hide cursor (`cursor: 'never'`) **tidak dihormati** Chromium untuk tab capture: track melaporkan `cursor: 'motion'`. Toggle tetap ada, dan app memberi peringatan kalau permintaannya diabaikan.
+- Flow dibuat dua langkah (Open website, lalu Record) karena popup yang baru dibuka mengambil fokus dan menutupi dialog pilih tab. Ini juga memberi kesempatan menyiapkan halaman sebelum merekam.
+- `setFocusBehavior('no-focus-change')` dipakai supaya app tetap di depan selama countdown; popup difokuskan saat rekaman mulai.
+
 ## Batasan
 
 - **Izin tiap record:** dialog pilih tab dari browser selalu muncul dan tidak bisa dilewati.
