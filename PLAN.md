@@ -9,7 +9,7 @@ Web app untuk merekam interaksi di sebuah website, lalu membungkus rekamannya de
 | Cara capture | Tab capture: website dibuka di popup, direkam via Screen Capture API |
 | Scope | Tool pribadi/internal: tanpa login, tanpa backend, tanpa cloud storage |
 | Output | MP4 (H.264), 1600×1200, 60fps; ukuran canvas bisa diubah |
-| Custom cursor + visualisasi click | P2 |
+| Custom cursor + visualisasi click | P3 (ditunda: butuh extension browser) |
 | Compress ke resolusi lebih kecil | P2 |
 | Browser yang didukung | Chrome/Edge desktop |
 
@@ -49,7 +49,7 @@ Semua jalan di browser dan bisa di-host sebagai static site.
 ### 5. Trim dan opsi
 - Timeline dengan handle awal/akhir; hanya menyimpan in/out point, file asli tidak dipotong.
 - Toggle include/hide cursor (lihat Batasan).
-- P2: custom cursor, visualisasi click.
+- P3: custom cursor, visualisasi click.
 
 ### 6. Render dan export
 - Render dengan progress bar.
@@ -62,11 +62,12 @@ Semua jalan di browser dan bisa di-host sebagai static site.
 2. **Editor:** canvas, background, transform rekaman, layer gambar.
 3. **Trim + render MP4.**
 4. **Polish:** simpan project lokal, preset canvas, error state (izin ditolak, popup diblokir, viewport melebihi layar).
-5. **P2:** compress, GIF, custom cursor + visualisasi click.
+5. **P2:** compress, GIF.
+6. **P3 (ditunda):** custom cursor + visualisasi click.
 
 ## Status
 
-Milestone 1–4 sudah diimplementasikan, plus dari P2: "compress" (pilihan ukuran export 75/50/25% dan bitrate) dan export GIF (palet global 255 warna, ordered dithering, piksel yang tidak berubah ditulis transparan; default 50% ukuran canvas, 20fps). Yang belum: custom cursor + visualisasi click, karena butuh extension pendamping.
+Milestone 1–4 sudah diimplementasikan, plus dari P2: "compress" (pilihan ukuran export 75/50/25% dan bitrate) dan export GIF (palet global 255 warna, ordered dithering, piksel yang tidak berubah ditulis transparan; default 50% ukuran canvas, 20fps). P2 selesai. Custom cursor + visualisasi click diturunkan ke P3 dan ditunda: fitur ini butuh extension browser pendamping, dan memasang extension tidak diinginkan saat ini.
 
 Temuan spike capture (Chromium, diuji otomatis lewat Playwright):
 
@@ -82,7 +83,7 @@ Temuan spike capture (Chromium, diuji otomatis lewat Playwright):
 - **Countdown:** popup berisi website orang lain, jadi 3-2-1 tidak bisa ditampilkan di dalamnya. Countdown tampil di app; trim menutupi sisa detik awal.
 - **Viewport vs layar:** popup tidak bisa lebih besar dari layar user. 1680×900 tidak muat di laptop 1440px; viewport harus diturunkan di kasus itu.
 - **Cursor di P1:** toggle include/hide bergantung pada opsi capture browser; dukungannya untuk tab capture harus dibuktikan di spike.
-- **Cursor di P2:** custom cursor dan click butuh data posisi cursor, yang tidak tersedia dari tab capture. Perlu extension kecil pendamping.
+- **Cursor di P3:** custom cursor dan click butuh data posisi cursor, yang tidak tersedia dari tab capture. Perlu extension kecil pendamping.
 - **Pilihan user di dialog:** kalau user memilih window atau screen (bukan tab), rekaman ikut memuat address bar. App perlu mendeteksi dan memberi peringatan.
 
 ## Pertanyaan terbuka

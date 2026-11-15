@@ -40,4 +40,4 @@ An existing video file can be imported instead of recording. The project (settin
 - The browser's tab picker appears for every recording and cannot be skipped.
 - The popup cannot be larger than the screen; the app warns and offers "Fit".
 - **Hide cursor** is a request the browser may ignore. In testing, Chromium did not honor it for tab capture; the app warns when that happens.
-- Not built yet (P2 in the plan): custom cursor and click visualisation (needs a companion extension).
+- Deferred (P3 in the plan): custom cursor and click visualisation. They need a companion browser extension, which is not wanted for now.
