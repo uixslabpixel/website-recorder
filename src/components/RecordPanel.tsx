@@ -9,6 +9,7 @@ import {
   openTargetPopup,
   viewportFits,
 } from '../lib/capture';
+import { HOSTED } from '../lib/env';
 import { prepareVideo } from '../lib/media';
 import { VIEWPORT_PRESETS, useProject } from '../store';
 import { Field, Notice, Num, Section } from './controls';
@@ -23,6 +24,7 @@ type Phase =
 
 export function RecordPanel() {
   const p = useProject();
+  const sample = p.recording?.sample;
   const [phase, setPhase] = useState<Phase>({ name: 'idle' });
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -127,6 +129,7 @@ export function RecordPanel() {
 
   return (
     <>
+      {!HOSTED && (
       <Section title="Website">
         <Field label="URL">
           <input
@@ -185,8 +188,15 @@ export function RecordPanel() {
           </label>
         </div>
       </Section>
+      )}
 
-      <Section title="Record">
+      <Section title={HOSTED ? 'Recording' : 'Record'}>
+        {HOSTED ? (
+          <Notice tone="info">
+            Recording a website needs screen capture, which this hosted page is not allowed to use. Import a screen recording here, or run the app locally to record directly.
+          </Notice>
+        ) : (
+          <>
         {!supported && <Notice tone="error">Tab recording needs Chrome or Edge on desktop. You can still import a video file below.</Notice>}
         <ol className="steps">
           <li className={phase.name === 'idle' ? 'current' : 'done'}>Open the website in a popup and get it ready.</li>
@@ -211,15 +221,18 @@ export function RecordPanel() {
             Show website window
           </button>
         )}
+          </>
+        )}
         {error && <Notice tone="error">{error}</Notice>}
         {warnings.map((w) => (
           <Notice key={w} tone="warn">
             {w}
           </Notice>
         ))}
-        <button type="button" className="ghost" disabled={busy} onClick={() => fileRef.current?.click()}>
-          Import a video file instead
+        <button type="button" className={HOSTED ? 'primary' : 'ghost'} disabled={busy} onClick={() => fileRef.current?.click()}>
+          {phase.name === 'finishing' && HOSTED ? 'Importing…' : HOSTED ? 'Import a video file' : 'Import a video file instead'}
         </button>
+        {HOSTED && sample && <p className="hint">The clip on the canvas is a sample. Importing replaces it.</p>}
         <input
           ref={fileRef}
           type="file"

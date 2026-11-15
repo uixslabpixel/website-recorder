@@ -10,6 +10,7 @@ export function Stage() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasSize = useProject((s) => s.canvas);
   const hasRecording = useProject((s) => !!s.recording);
+  const isSample = useProject((s) => !!s.recording?.sample);
 
   // Fit the canvas inside the available area while keeping the project aspect ratio.
   useEffect(() => {
@@ -118,6 +119,7 @@ export function Stage() {
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       />
+      {isSample && <p className="stage-hint">Sample clip</p>}
       {!hasRecording && <p className="stage-hint">No recording yet. Record a website or import a video to see it here.</p>}
     </div>
   );

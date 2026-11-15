@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getVideo } from '../lib/assets';
+import { saveFile } from '../lib/env';
 import { formatBytes } from '../lib/media';
 import { renderProject, type RenderResult } from '../lib/render';
 import { useProject } from '../store';
@@ -13,6 +14,7 @@ export function ExportPanel() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<(RenderResult & { url: string; seconds: number }) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
 
   useEffect(() => () => void (result && URL.revokeObjectURL(result.url)), [result]);
 
@@ -25,6 +27,7 @@ export function ExportPanel() {
     if (!video) return;
     setError(null);
     setResult(null);
+    setSaveNote(null);
     setProgress(0);
     abortRef.current = new AbortController();
     const startedAt = performance.now();
@@ -106,9 +109,18 @@ export function ExportPanel() {
           <p className="hint">
             {result.width}×{result.height} · {result.frames} frames · {formatBytes(result.blob.size)} · rendered in {result.seconds.toFixed(1)}s
           </p>
-          <a className="button primary" href={result.url} download={fileName()}>
+          <button
+            type="button"
+            className="primary"
+            onClick={async () => {
+              setSaveNote(null);
+              const outcome = await saveFile(result.blob, fileName());
+              if (outcome === 'unavailable') setSaveNote('Saving files is not available in this view. Open the page in a browser tab on claude.ai, or run the app locally.');
+            }}
+          >
             Download {result.extension.toUpperCase()}
-          </a>
+          </button>
+          {saveNote && <Notice tone="warn">{saveNote}</Notice>}
         </div>
       )}
     </Section>

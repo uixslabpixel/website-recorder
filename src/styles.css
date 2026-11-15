@@ -19,6 +19,12 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -30,7 +36,7 @@ body {
   display: grid;
   grid-template: 48px minmax(0, 1fr) / 300px minmax(0, 1fr) 300px;
   grid-template-areas: 'top top top' 'left center right';
-  height: 100vh;
+  height: 100%;
 }
 
 .topbar {
@@ -41,6 +47,8 @@ body {
   padding: 0 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 .topbar h1 {
   margin: 0;
@@ -90,6 +98,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 .section-head {
   display: flex;
@@ -297,6 +307,20 @@ button.link:hover:not(:disabled) {
   background: none;
 }
 
+button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .segmented {
   display: flex;
   background: var(--raised);
@@ -334,6 +358,11 @@ button.link:hover:not(:disabled) {
   border-radius: 6px;
   font-size: 12px;
   border: 1px solid;
+}
+.notice.info {
+  color: #c9c9d6;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border);
 }
 .notice.warn {
   color: #f8d58c;
@@ -454,6 +483,8 @@ button.link:hover:not(:disabled) {
   padding: 0 16px;
   background: var(--panel);
   border-top: 1px solid var(--border);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 .timeline.empty {
   color: var(--muted);
@@ -614,5 +645,54 @@ progress {
   }
   .topbar h1 {
     flex: 1;
+  }
+}
+
+/* Phone and narrow windows: one scrolling column, canvas first. */
+@media (max-width: 760px) {
+  body {
+    overflow: auto;
+  }
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 100%;
+  }
+  .topbar {
+    min-height: 48px;
+    padding-block: 8px;
+    flex-wrap: wrap;
+  }
+  .center {
+    order: 1;
+  }
+  .stage {
+    flex: none;
+    height: min(78vw, 60vh);
+  }
+  .panel {
+    overflow: visible;
+    border: none;
+  }
+  .panel.left {
+    order: 2;
+  }
+  .panel.right {
+    order: 3;
+  }
+  .timeline {
+    height: auto;
+    padding-block: 12px;
+    flex-wrap: wrap;
+  }
+  .timeline .track {
+    order: 5;
+    flex: 1 0 100%;
+  }
+  .stage-hint {
+    white-space: normal;
+    text-align: center;
+    max-width: calc(100% - 32px);
   }
 }

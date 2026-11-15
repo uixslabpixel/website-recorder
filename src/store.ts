@@ -38,6 +38,8 @@ export interface Recording {
   width: number;
   height: number;
   /** What the browser reported for the capture, kept to explain warnings. */
+  /** Bundled demo clip rather than the user's own recording. */
+  sample?: boolean;
   displaySurface?: string;
   cursor?: string;
 }

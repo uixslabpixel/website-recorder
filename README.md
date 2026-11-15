@@ -11,6 +11,8 @@ npm run dev
 
 `npm run build` produces a static site in `dist/` that can be hosted anywhere. Use Chrome or Edge on desktop.
 
+`npm run build:hosted` builds a single self-contained HTML file (`artifact/website-recorder.html`) for hosts that only take one page. That build has no recording (screen capture is not allowed there): it opens with a sample clip and works on imported videos.
+
 ## How it works
 
 1. **Setup** – enter a URL, viewport (default 1680×900) and duration (default 5s).
