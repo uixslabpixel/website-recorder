@@ -11,7 +11,7 @@ import {
 import { HOSTED } from '../lib/env';
 import { prepareVideo } from '../lib/media';
 import { VIEWPORT_PRESETS, useProject } from '../store';
-import { Field, Notice, Num, Section } from './controls';
+import { Icon, Notice, Num, Row, Section, Toggle } from './controls';
 
 type Phase =
   | { name: 'idle' }
@@ -22,7 +22,6 @@ type Phase =
 
 export function RecordPanel() {
   const p = useProject();
-  const sample = p.recording?.sample;
   const [phase, setPhase] = useState<Phase>({ name: 'idle' });
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -54,7 +53,7 @@ export function RecordPanel() {
   const record = async () => {
     setError(null);
     setWarnings([]);
-    if (!url) return setError('Enter a valid http(s) URL first.');
+    if (!url) return setError('Enter a valid http(s) URL.');
     p.set({ url });
     abortRef.current = new AbortController();
     try {
@@ -99,141 +98,127 @@ export function RecordPanel() {
   };
 
   const preset = VIEWPORT_PRESETS.find((v) => v.width === p.viewport.width && v.height === p.viewport.height);
+  const invalid = p.url !== '' && !url;
+
+  const importButton = (
+    <button type="button" className={HOSTED ? 'primary wide' : 'ghost wide'} disabled={busy} onClick={() => fileRef.current?.click()}>
+      <Icon name="upload" />
+      {phase.name === 'finishing' && HOSTED ? 'Importing…' : 'Import video'}
+    </button>
+  );
 
   return (
     <>
-      {!HOSTED && (
-      <Section title="Website">
-        <Field label="URL">
+      {HOSTED ? (
+        <Section title="Video" tip="Recording needs screen capture, which this hosted page cannot use. Run the app locally to record a website.">
+          {importButton}
+        </Section>
+      ) : (
+        <Section
+          title="Record"
+          tip={`Click Record and share the tab named “Website Recorder”. It counts down 3-2-1, loads your site, records ${p.recordSeconds}s and closes itself.`}
+        >
           <input
             type="url"
             placeholder="https://example.com"
+            aria-label="Website URL"
             value={p.url}
             disabled={busy}
-            aria-invalid={p.url !== '' && !url}
+            aria-invalid={invalid}
             onChange={(e) => p.set({ url: e.target.value })}
             onKeyDown={(e) => e.key === 'Enter' && phase.name === 'idle' && void record()}
           />
-        </Field>
-        {p.url !== '' && !url && <Notice tone="error">That does not look like a valid http(s) address.</Notice>}
+          {invalid && <Notice tone="error">Not a valid http(s) address.</Notice>}
 
-        <Field label="Viewport">
-          <select
-            value={preset ? `${preset.width}x${preset.height}` : 'custom'}
-            disabled={busy}
-            onChange={(e) => {
-              const v = VIEWPORT_PRESETS.find((x) => `${x.width}x${x.height}` === e.target.value);
-              if (v) p.set({ viewport: { width: v.width, height: v.height } });
-            }}
-          >
-            {VIEWPORT_PRESETS.map((v) => (
-              <option key={v.label} value={`${v.width}x${v.height}`}>
-                {v.label}
-              </option>
-            ))}
-            {!preset && <option value="custom">Custom</option>}
-          </select>
-        </Field>
-        <div className="row">
-          <Field label="Width">
-            <Num value={p.viewport.width} min={320} max={7680} suffix="px" onChange={(width) => p.set({ viewport: { ...p.viewport, width: Math.round(width) } })} />
-          </Field>
-          <Field label="Height">
-            <Num value={p.viewport.height} min={240} max={4320} suffix="px" onChange={(height) => p.set({ viewport: { ...p.viewport, height: Math.round(height) } })} />
-          </Field>
-        </div>
-        {!fits && (
-          <Notice tone="warn">
-            This viewport is larger than your screen ({maxViewport().width}×{maxViewport().height} usable), so the popup will be clamped.{' '}
-            <button type="button" className="link" onClick={fitToScreen}>
-              Fit to screen
-            </button>
-          </Notice>
-        )}
-
-        <div className="row">
-          <Field label="Duration">
+          <Row label="Viewport">
+            <select
+              value={preset ? `${preset.width}x${preset.height}` : 'custom'}
+              disabled={busy}
+              onChange={(e) => {
+                const v = VIEWPORT_PRESETS.find((x) => `${x.width}x${x.height}` === e.target.value);
+                if (v) p.set({ viewport: { width: v.width, height: v.height } });
+              }}
+            >
+              {VIEWPORT_PRESETS.map((v) => (
+                <option key={v.label} value={`${v.width}x${v.height}`}>
+                  {v.label}
+                </option>
+              ))}
+              {!preset && <option value="custom">Custom</option>}
+            </select>
+          </Row>
+          <div className="row">
+            <span className="label">Size</span>
+            <span className="control pair">
+              <Num prefix="W" label="Viewport width" value={p.viewport.width} min={320} max={7680} onChange={(width) => p.set({ viewport: { ...p.viewport, width: Math.round(width) } })} />
+              <Num prefix="H" label="Viewport height" value={p.viewport.height} min={240} max={4320} onChange={(height) => p.set({ viewport: { ...p.viewport, height: Math.round(height) } })} />
+            </span>
+          </div>
+          {!fits && (
+            <Notice tone="warn">
+              Bigger than your screen ({maxViewport().width}×{maxViewport().height}).{' '}
+              <button type="button" className="link" onClick={fitToScreen}>
+                Fit
+              </button>
+            </Notice>
+          )}
+          <Row label="Duration">
             <Num value={p.recordSeconds} min={1} max={120} step={1} suffix="s" onChange={(recordSeconds) => p.set({ recordSeconds })} />
-          </Field>
-          <label className="check">
-            <input type="checkbox" checked={p.hideCursor} onChange={(e) => p.set({ hideCursor: e.target.checked })} />
-            Hide cursor
-          </label>
-        </div>
-      </Section>
+          </Row>
+          <Row label="Hide cursor" tip="A request the browser may ignore for tab capture.">
+            <Toggle checked={p.hideCursor} onChange={(hideCursor) => p.set({ hideCursor })} />
+          </Row>
+
+          {!supported && <Notice tone="error">Recording needs Chrome or Edge on desktop.</Notice>}
+          <button type="button" className="primary wide record" disabled={!supported || !url || busy} onClick={record}>
+            {phase.name === 'idle' && <span className="dot" aria-hidden />}
+            {phase.name === 'idle' ? 'Record' : phase.name === 'picking' ? 'Waiting for tab…' : phase.name === 'finishing' ? 'Processing…' : 'Recording…'}
+          </button>
+          {phase.name === 'picking' && <Notice tone="info">In the share dialog, pick the tab “Website Recorder: pick this tab”.</Notice>}
+          {importButton}
+        </Section>
       )}
 
-      <Section title={HOSTED ? 'Recording' : 'Record'}>
-        {HOSTED ? (
-          <Notice tone="info">
-            Recording a website needs screen capture, which this hosted page is not allowed to use. Import a screen recording here, or run the app locally to record directly.
-          </Notice>
-        ) : (
-          <>
-        {!supported && <Notice tone="error">Tab recording needs Chrome or Edge on desktop. You can still import a video file below.</Notice>}
-        <ol className="steps">
-              <li className={phase.name === 'idle' || phase.name === 'picking' ? 'current' : ''}>
-                Click Record. A small window opens and the browser asks what to share: pick <b>“Website Recorder: pick this tab”</b> under Tab.
-              </li>
-              <li className={phase.name === 'countdown' ? 'current' : ''}>That window grows to the viewport and counts down 3-2-1.</li>
-              <li className={phase.name === 'recording' ? 'current' : ''}>
-                The website loads in it. Interact for {p.recordSeconds}s; it closes by itself.
-              </li>
-            </ol>
-            <button type="button" className="primary record" disabled={!supported || !url || busy} onClick={record}>
-              {phase.name === 'idle'
-                ? '● Record'
-                : phase.name === 'picking'
-                  ? 'Waiting for tab choice…'
-                  : phase.name === 'finishing'
-                    ? 'Processing…'
-                    : 'Recording…'}
-            </button>
-          </>
-        )}
-        {error && <Notice tone="error">{error}</Notice>}
-        {warnings.map((w) => (
-          <Notice key={w} tone="warn">
-            {w}
-          </Notice>
-        ))}
-        <button type="button" className={HOSTED ? 'primary' : 'ghost'} disabled={busy} onClick={() => fileRef.current?.click()}>
-          {phase.name === 'finishing' && HOSTED ? 'Importing…' : HOSTED ? 'Import a video file' : 'Import a video file instead'}
-        </button>
-        {HOSTED && sample && <p className="hint">The clip on the canvas is a sample. Importing replaces it.</p>}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.mkv"
-          hidden
-          data-testid="import-video"
-          onChange={(e) => {
-            void importFile(e.target.files?.[0]);
-            e.target.value = '';
-          }}
-        />
-      </Section>
+      {(error || warnings.length > 0) && (
+        <div className="notices">
+          {error && <Notice tone="error">{error}</Notice>}
+          {warnings.map((w) => (
+            <Notice key={w} tone="warn">
+              {w}
+            </Notice>
+          ))}
+        </div>
+      )}
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.mkv"
+        hidden
+        data-testid="import-video"
+        onChange={(e) => {
+          void importFile(e.target.files?.[0]);
+          e.target.value = '';
+        }}
+      />
 
       {(phase.name === 'countdown' || phase.name === 'recording') && (
         <div className="overlay" role="status" aria-live="assertive">
           {phase.name === 'countdown' ? (
-            <>
-              <div className="count" key={phase.left}>
-                {phase.left}
-              </div>
-              <p>Recording starts in the website window</p>
-            </>
+            <div className="count" key={phase.left}>
+              {phase.left}
+            </div>
           ) : (
             <>
-              <div className="rec-dot" />
-              <p>
-                Recording… {Math.max(0, phase.total - phase.elapsed).toFixed(1)}s left
+              <p className="rec-status">
+                <span className="rec-dot" />
+                {Math.max(0, phase.total - phase.elapsed).toFixed(1)}s left
               </p>
               <progress value={phase.elapsed} max={phase.total} />
             </>
           )}
           <button type="button" onClick={() => abortRef.current?.abort()}>
-            {phase.name === 'countdown' ? 'Cancel' : 'Stop now'}
+            {phase.name === 'countdown' ? 'Cancel' : 'Stop'}
           </button>
         </div>
       )}

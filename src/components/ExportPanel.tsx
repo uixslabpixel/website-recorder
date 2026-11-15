@@ -5,7 +5,7 @@ import { saveFile } from '../lib/env';
 import { formatBytes } from '../lib/media';
 import { renderProject, type RenderResult } from '../lib/render';
 import { useProject } from '../store';
-import { Field, Notice, Num, Section } from './controls';
+import { Icon, Notice, Num, Row, useDismiss } from './controls';
 
 const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
@@ -16,11 +16,12 @@ export function ExportPanel() {
   const [result, setResult] = useState<(RenderResult & { url: string; seconds: number }) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useDismiss(menuRef, open, () => setOpen(false));
 
   useEffect(() => () => void (result && URL.revokeObjectURL(result.url)), [result]);
 
-  const outW = even(p.canvas.width * p.exportScale);
-  const outH = even(p.canvas.height * p.exportScale);
   const length = keptLength(p.trim, p.cuts);
 
   const render = async () => {
@@ -45,6 +46,7 @@ export function ExportPanel() {
         signal: abortRef.current.signal,
       });
       setResult({ ...r, url: URL.createObjectURL(r.blob), seconds: (performance.now() - startedAt) / 1000 });
+      setOpen(true);
     } catch (err) {
       if ((err as DOMException)?.name !== 'AbortError') setError(`Render failed: ${(err as Error).message}`);
     } finally {
@@ -62,69 +64,76 @@ export function ExportPanel() {
     return `${host}-${result?.width}x${result?.height}.${result?.extension}`;
   };
 
+  const busy = progress !== null;
   return (
-    <Section title="Export">
-      <Field label="Size">
-        <select value={p.exportScale} onChange={(e) => p.set({ exportScale: Number(e.target.value) })}>
-          {[1, 0.75, 0.5, 0.25].map((s) => (
-            <option key={s} value={s}>
-              {s === 1 ? 'Full' : `${s * 100}%`} · {even(p.canvas.width * s)}×{even(p.canvas.height * s)}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <div className="row">
-        <Field label="Frame rate">
-          <select value={p.exportFps} onChange={(e) => p.set({ exportFps: Number(e.target.value) })}>
-            <option value={60}>60 fps</option>
-            <option value={30}>30 fps</option>
-          </select>
-        </Field>
-        <Field label="Bitrate">
-          <Num value={p.exportBitrateMbps} min={1} max={100} suffix="Mbps" onChange={(exportBitrateMbps) => p.set({ exportBitrateMbps })} />
-        </Field>
-      </div>
-      <p className="hint">
-        {outW}×{outH}, {length.toFixed(2)}s, about {formatBytes((p.exportBitrateMbps * 1e6 * length) / 8)}.
-      </p>
+    <div className="menu" ref={menuRef}>
+      <button type="button" className="accent" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {busy ? `${Math.round(progress * 100)}%` : 'Export'}
+      </button>
+      {open && (
+        <div className="popover export" role="dialog" aria-label="Export">
+          <Row label="Size">
+            <select value={p.exportScale} onChange={(e) => p.set({ exportScale: Number(e.target.value) })}>
+              {[1, 0.75, 0.5, 0.25].map((s) => (
+                <option key={s} value={s}>
+                  {even(p.canvas.width * s)}×{even(p.canvas.height * s)}
+                  {s === 1 ? '' : ` (${s * 100}%)`}
+                </option>
+              ))}
+            </select>
+          </Row>
+          <Row label="Frame rate">
+            <select value={p.exportFps} onChange={(e) => p.set({ exportFps: Number(e.target.value) })}>
+              <option value={60}>60 fps</option>
+              <option value={30}>30 fps</option>
+            </select>
+          </Row>
+          <Row label="Bitrate" tip="Higher is sharper, and a bigger file.">
+            <Num value={p.exportBitrateMbps} min={1} max={100} suffix="Mbps" onChange={(exportBitrateMbps) => p.set({ exportBitrateMbps })} />
+          </Row>
 
-      {progress === null ? (
-        <button type="button" className="primary" disabled={!p.recording} onClick={render}>
-          Render video
-        </button>
-      ) : (
-        <div className="progress">
-          <progress value={progress} max={1} aria-label="Render progress" />
-          <span>{Math.round(progress * 100)}%</span>
-          <button type="button" className="small" onClick={() => abortRef.current?.abort()}>
-            Cancel
-          </button>
-        </div>
-      )}
-      {error && <Notice tone="error">{error}</Notice>}
-      {result && (
-        <div className="result">
-          <video src={result.url} controls loop muted playsInline />
-          {result.extension !== 'mp4' && (
-            <Notice tone="warn">This browser has no H.264 encoder, so the export is WebM ({result.codec.toUpperCase()}) instead of MP4.</Notice>
+          {busy ? (
+            <div className="progress">
+              <progress value={progress} max={1} aria-label="Render progress" />
+              <button type="button" className="small" onClick={() => abortRef.current?.abort()}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="primary wide" disabled={!p.recording} onClick={render}>
+              {result ? 'Render again' : 'Render'}
+              {p.recording && (
+                <span className="meta">
+                  {length.toFixed(1)}s · ~{formatBytes((p.exportBitrateMbps * 1e6 * length) / 8)}
+                </span>
+              )}
+            </button>
           )}
-          <p className="hint">
-            {result.width}×{result.height} · {result.frames} frames · {formatBytes(result.blob.size)} · rendered in {result.seconds.toFixed(1)}s
-          </p>
-          <button
-            type="button"
-            className="primary"
-            onClick={async () => {
-              setSaveNote(null);
-              const outcome = await saveFile(result.blob, fileName());
-              if (outcome === 'unavailable') setSaveNote('Saving files is not available in this view. Open the page in a browser tab on claude.ai, or run the app locally.');
-            }}
-          >
-            Download {result.extension.toUpperCase()}
-          </button>
-          {saveNote && <Notice tone="warn">{saveNote}</Notice>}
+          {!p.recording && <p className="hint">No recording yet</p>}
+          {error && <Notice tone="error">{error}</Notice>}
+          {result && !busy && (
+            <div className="result">
+              <video src={result.url} controls loop muted playsInline />
+              {result.extension !== 'mp4' && <Notice tone="warn">No H.264 encoder in this browser, so this is WebM.</Notice>}
+              <button
+                type="button"
+                className="accent wide"
+                data-tip={`${result.width}×${result.height} · ${result.frames} frames · rendered in ${result.seconds.toFixed(1)}s`}
+                onClick={async () => {
+                  setSaveNote(null);
+                  const outcome = await saveFile(result.blob, fileName());
+                  if (outcome === 'unavailable') setSaveNote('Saving is blocked in this view. Open the page in its own tab, or run the app locally.');
+                }}
+              >
+                <Icon name="download" />
+                Download {result.extension.toUpperCase()}
+                <span className="meta">{formatBytes(result.blob.size)}</span>
+              </button>
+              {saveNote && <Notice tone="warn">{saveNote}</Notice>}
+            </div>
+          )}
         </div>
       )}
-    </Section>
+    </div>
   );
 }

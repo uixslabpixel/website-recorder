@@ -4,6 +4,7 @@ import { formatTime } from '../lib/media';
 import { HoverPreview } from './HoverPreview';
 import { pause, play, seek } from '../lib/player';
 import { useProject, useUi } from '../store';
+import { Icon } from './controls';
 
 type Handle = 'in' | 'out' | 'playhead' | { cut: number; edge: 'start' | 'end' };
 
@@ -58,7 +59,7 @@ export function Timeline() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (!recording) return <div className="timeline empty">Trim controls appear once there is a recording.</div>;
+  if (!recording) return null;
 
   const timeAt = (clientX: number) => {
     const box = trackRef.current!.getBoundingClientRect();
@@ -126,18 +127,22 @@ export function Timeline() {
 
   return (
     <div className="timeline">
-      <button type="button" className="play restart" onClick={playFromStart} aria-label="Play from the beginning" title="Play from the beginning">
-        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-          <rect x="2" y="3" width="2" height="10" rx="0.5" fill="currentColor" />
-          <path d="M14 3.5v9a.5.5 0 0 1-.77.42L6.3 8.42a.5.5 0 0 1 0-.84l6.93-4.5A.5.5 0 0 1 14 3.5Z" fill="currentColor" />
-        </svg>
+      <button type="button" className="icon-btn" onClick={playFromStart} aria-label="Play from start" data-tip="Play from start">
+        <Icon name="restart" />
       </button>
-      <button type="button" className="play" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
-        {playing ? '❚❚' : '▶'}
+      <button type="button" className="play" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} data-tip={playing ? 'Pause (Space)' : 'Play (Space)'}>
+        <Icon name={playing ? 'pause' : 'play'} />
       </button>
       <span className="time">{formatTime(time)}</span>
-      <button type="button" className="cut-btn" onClick={cutAtPlayhead} title={insideCut ? 'Remove the cut under the playhead' : `Cut ${NEW_CUT}s from the playhead; drag its edges to adjust`}>
-        {insideCut ? 'Uncut' : '✂ Cut'}
+      <button
+        type="button"
+        className="icon-btn cut-btn"
+        onClick={cutAtPlayhead}
+        aria-label={insideCut ? 'Remove cut' : 'Cut at playhead'}
+        aria-pressed={insideCut}
+        data-tip={insideCut ? 'Remove this cut' : `Cut ${NEW_CUT}s at the playhead, then drag its edges`}
+      >
+        <Icon name="cut" />
       </button>
       <div
         className="track"
@@ -175,7 +180,7 @@ export function Timeline() {
                 setSelectedCut(null);
               }}
             >
-              ×
+              <Icon name="x" size={10} />
             </button>
           </div>
         ))}
@@ -189,8 +194,8 @@ export function Timeline() {
           onKeyDown={nudge('playhead', time)}
         />
       </div>
-      <span className="time" title="Edited length / full recording">
-        {formatTime(keptLength(trim, cuts))} <small>of {formatTime(duration)}</small>
+      <span className="time end" data-tip="Edited length / full recording">
+        {formatTime(keptLength(trim, cuts))} <small>/ {formatTime(duration)}</small>
       </span>
     </div>
   );

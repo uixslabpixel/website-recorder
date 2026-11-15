@@ -1,4 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { IconButton, Tooltips, useDismiss } from './components/controls';
 import { ExportPanel } from './components/ExportPanel';
 import { Inspector } from './components/Inspector';
 import { RecordPanel } from './components/RecordPanel';
@@ -50,6 +51,8 @@ export function App() {
   useSyncExternalStore(subscribeAssets, getAssetsVersion);
   const recordingId = useProject((s) => s.recording?.assetId);
   const resetProject = useProject((s) => s.resetProject);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  useDismiss(confirmRef, confirming, () => setConfirming(false));
 
   useEffect(() => {
     void restoreProject().finally(() => setReady(true));
@@ -75,27 +78,25 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <h1>
-          <span className="logo" aria-hidden>
-            ●
-          </span>
-          Website Recorder
+          <span className="logo" aria-hidden />
+          Recorder
         </h1>
-        <span className="tagline">Record a site, frame it, export a Dribbble-ready video</span>
-        {confirming ? (
-          <span className="confirm" role="alertdialog" aria-label="Start a new project?">
-            <span>Remove the recording, images and settings?</span>
-            <button type="button" className="danger" onClick={newProject}>
-              Remove
-            </button>
-            <button type="button" onClick={() => setConfirming(false)}>
-              Keep
-            </button>
-          </span>
-        ) : (
-          <button type="button" onClick={() => setConfirming(true)}>
-            New project
-          </button>
-        )}
+        <span className="spacer" />
+        <div className="menu" ref={confirmRef}>
+          <IconButton icon="fresh" label="New project" onClick={() => setConfirming(!confirming)} />
+          {confirming && (
+            <div className="popover confirm" role="alertdialog" aria-label="Discard this project?">
+              <p>Discard this project?</p>
+              <button type="button" className="small" onClick={() => setConfirming(false)}>
+                Keep
+              </button>
+              <button type="button" className="small danger" onClick={newProject}>
+                Discard
+              </button>
+            </div>
+          )}
+        </div>
+        <ExportPanel />
       </header>
       <aside className="panel left">
         <RecordPanel />
@@ -106,8 +107,8 @@ export function App() {
       </main>
       <aside className="panel right">
         <Inspector />
-        <ExportPanel />
       </aside>
+      <Tooltips />
     </div>
   );
 }

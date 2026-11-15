@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { getImage, putAsset, removeAsset } from '../lib/assets';
 import { CANVAS_PRESETS, RECORDING_LAYER_ID, useProject, useUi, type Background } from '../store';
-import { Color, Field, Notice, Num, Section, Segmented, Slider } from './controls';
+import { Color, Icon, IconButton, Notice, Num, Row, Section, Segmented, Slider, Toggle } from './controls';
 
 const percent = (v: number) => `${Math.round(v * 100)}%`;
 const px = (v: number) => `${Math.round(v)}px`;
@@ -37,7 +37,7 @@ function CanvasSection() {
   const preset = CANVAS_PRESETS.find((c) => c.width === canvas.width && c.height === canvas.height);
   return (
     <Section title="Canvas">
-      <Field label="Preset">
+      <Row label="Preset">
         <select
           value={preset?.label ?? 'custom'}
           onChange={(e) => {
@@ -47,19 +47,18 @@ function CanvasSection() {
         >
           {CANVAS_PRESETS.map((c) => (
             <option key={c.label} value={c.label}>
-              {c.label} · {c.width}×{c.height}
+              {c.label}
             </option>
           ))}
           {!preset && <option value="custom">Custom</option>}
         </select>
-      </Field>
+      </Row>
       <div className="row">
-        <Field label="Width">
-          <Num value={canvas.width} min={200} max={4096} suffix="px" onChange={(width) => set({ canvas: { ...canvas, width: Math.round(width) } })} />
-        </Field>
-        <Field label="Height">
-          <Num value={canvas.height} min={200} max={4096} suffix="px" onChange={(height) => set({ canvas: { ...canvas, height: Math.round(height) } })} />
-        </Field>
+        <span className="label">Size</span>
+        <span className="control pair">
+          <Num prefix="W" label="Canvas width" value={canvas.width} min={200} max={4096} onChange={(width) => set({ canvas: { ...canvas, width: Math.round(width) } })} />
+          <Num prefix="H" label="Canvas height" value={canvas.height} min={200} max={4096} onChange={(height) => set({ canvas: { ...canvas, height: Math.round(height) } })} />
+        </span>
       </div>
     </Section>
   );
@@ -102,9 +101,9 @@ function BackgroundSection() {
         }}
       />
       {bg.type === 'solid' && (
-        <Field label="Color">
+        <Row label="Color">
           <Color value={bg.color} onChange={(color) => setBg({ ...bg, color })} />
-        </Field>
+        </Row>
       )}
       {bg.type === 'gradient' && (
         <>
@@ -114,31 +113,28 @@ function BackgroundSection() {
                 key={from + to}
                 type="button"
                 aria-label={`Gradient ${from} to ${to}`}
+                aria-pressed={bg.from === from && bg.to === to}
                 style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}
                 onClick={() => setBg({ ...bg, from, to })}
               />
             ))}
           </div>
-          <Field label="From">
+          <Row label="From">
             <Color value={bg.from} onChange={(from) => setBg({ ...bg, from })} />
-          </Field>
-          <Field label="To">
+          </Row>
+          <Row label="To">
             <Color value={bg.to} onChange={(to) => setBg({ ...bg, to })} />
-          </Field>
+          </Row>
           <Slider label="Angle" value={bg.angle} min={0} max={360} step={1} format={(v) => `${v}°`} onChange={(angle) => setBg({ ...bg, angle })} />
         </>
       )}
       {bg.type === 'image' && (
         <>
-          <button type="button" onClick={picker.open}>
+          <button type="button" className="wide" onClick={picker.open} data-tip={image ? `${image.width}×${image.height}, scaled to cover the canvas` : undefined}>
+            <Icon name="upload" />
             {image ? 'Replace image' : 'Upload image'}
           </button>
           {picker.input}
-          {image && (
-            <p className="hint">
-              {image.width}×{image.height}, scaled to cover the canvas.
-            </p>
-          )}
           {picker.error && <Notice tone="error">{picker.error}</Notice>}
         </>
       )}
@@ -150,11 +146,8 @@ function TransformFields({ t, onChange }: { t: { x: number; y: number; scale: nu
   return (
     <>
       <Slider label="Scale" value={t.scale} min={0.05} max={1.5} step={0.005} format={percent} onChange={(scale) => onChange({ scale })} />
-      <Slider label="Horizontal" value={t.x} min={-0.75} max={0.75} step={0.005} format={percent} onChange={(x) => onChange({ x })} />
-      <Slider label="Vertical" value={t.y} min={-0.75} max={0.75} step={0.005} format={percent} onChange={(y) => onChange({ y })} />
-      <button type="button" className="ghost" onClick={() => onChange({ x: 0, y: 0 })}>
-        Center
-      </button>
+      <Slider label="X" value={t.x} min={-0.75} max={0.75} step={0.005} format={percent} onChange={(x) => onChange({ x })} />
+      <Slider label="Y" value={t.y} min={-0.75} max={0.75} step={0.005} format={percent} onChange={(y) => onChange({ y })} />
     </>
   );
 }
@@ -168,14 +161,7 @@ function LayersSection() {
 
   return (
     <>
-      <Section
-        title="Layers"
-        action={
-          <button type="button" className="small" onClick={picker.open}>
-            + Image
-          </button>
-        }
-      >
+      <Section title="Layers" action={<IconButton icon="plus" label="Add image" onClick={picker.open} />}>
         {picker.input}
         {picker.error && <Notice tone="error">{picker.error}</Notice>}
         <ul className="layers">
@@ -185,27 +171,25 @@ function LayersSection() {
             return (
               <li key={id} className={selected === id ? 'selected' : ''}>
                 <button type="button" className="layer-name" onClick={() => select(id)} aria-pressed={selected === id}>
-                  <span aria-hidden>{id === RECORDING_LAYER_ID ? '▶' : '▣'}</span> {name}
+                  <Icon name={id === RECORDING_LAYER_ID ? 'video' : 'image'} />
+                  <span>{name}</span>
                 </button>
-                <button type="button" className="icon" aria-label={`Move ${name} up`} disabled={i === 0} onClick={() => moveLayer(id, 1)}>
-                  ↑
-                </button>
-                <button type="button" className="icon" aria-label={`Move ${name} down`} disabled={i === top.length - 1} onClick={() => moveLayer(id, -1)}>
-                  ↓
-                </button>
+                {top.length > 1 && (
+                  <>
+                    <IconButton icon="up" label={`Bring ${name} forward`} disabled={i === 0} onClick={() => moveLayer(id, 1)} />
+                    <IconButton icon="down" label={`Send ${name} backward`} disabled={i === top.length - 1} onClick={() => moveLayer(id, -1)} />
+                  </>
+                )}
                 {layer && (
-                  <button
-                    type="button"
-                    className="icon"
-                    aria-label={`Delete ${name}`}
+                  <IconButton
+                    icon="trash"
+                    label={`Delete ${name}`}
                     onClick={() => {
                       removeImageLayer(id);
                       void removeAsset(layer.assetId);
                       if (selected === id) select(RECORDING_LAYER_ID);
                     }}
-                  >
-                    ✕
-                  </button>
+                  />
                 )}
               </li>
             );
@@ -214,18 +198,17 @@ function LayersSection() {
       </Section>
 
       {image ? (
-        <Section title={`Image · ${image.name}`}>
+        <Section id="layer" title={image.name} action={<IconButton icon="center" label="Center on canvas" onClick={() => updateImageLayer(image.id, { x: 0, y: 0 })} />}>
           <TransformFields t={image} onChange={(patch) => updateImageLayer(image.id, patch)} />
-          <Slider label="Corner radius" value={image.radius} min={0} max={200} step={1} format={px} onChange={(radius) => updateImageLayer(image.id, { radius })} />
+          <Slider label="Radius" value={image.radius} min={0} max={200} step={1} format={px} onChange={(radius) => updateImageLayer(image.id, { radius })} />
         </Section>
       ) : (
-        <Section title="Recording">
+        <Section id="layer" title="Recording" action={<IconButton icon="center" label="Center on canvas" onClick={() => setRecordingLayer({ x: 0, y: 0 })} />}>
           <TransformFields t={rl} onChange={setRecordingLayer} />
-          <Slider label="Corner radius" value={rl.radius} min={0} max={120} step={1} format={px} onChange={(radius) => setRecordingLayer({ radius })} />
-          <label className="check">
-            <input type="checkbox" checked={rl.shadow} onChange={(e) => setRecordingLayer({ shadow: e.target.checked })} />
-            Shadow
-          </label>
+          <Slider label="Radius" value={rl.radius} min={0} max={120} step={1} format={px} onChange={(radius) => setRecordingLayer({ radius })} />
+          <Row label="Shadow">
+            <Toggle checked={rl.shadow} onChange={(shadow) => setRecordingLayer({ shadow })} />
+          </Row>
           {rl.shadow && (
             <>
               <Slider label="Blur" value={rl.shadowBlur} min={0} max={200} step={1} format={px} onChange={(shadowBlur) => setRecordingLayer({ shadowBlur })} />

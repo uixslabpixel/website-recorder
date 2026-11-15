@@ -53,9 +53,8 @@ export function Stage() {
       if (rect) {
         const k = canvas.width / p.canvas.width;
         ctx.save();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = '#4c9ffe';
-        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#008cff';
         ctx.strokeRect(rect.x * k, rect.y * k, rect.w * k, rect.h * k);
         ctx.restore();
       }
@@ -119,8 +118,12 @@ export function Stage() {
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       />
-      {isSample && <p className="stage-hint">Sample clip</p>}
-      {!hasRecording && <p className="stage-hint">No recording yet. Record a website or import a video to see it here.</p>}
+      {isSample && (
+        <p className="stage-hint" data-tip="Demo footage. Importing a video replaces it.">
+          Sample clip
+        </p>
+      )}
+      {!hasRecording && <p className="stage-hint">No recording yet</p>}
     </div>
   );
 }
