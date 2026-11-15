@@ -1,3 +1,4 @@
+import { keptLength } from '../lib/edit';
 import { useEffect, useRef, useState } from 'react';
 import { getVideo } from '../lib/assets';
 import { saveFile } from '../lib/env';
@@ -20,7 +21,7 @@ export function ExportPanel() {
 
   const outW = even(p.canvas.width * p.exportScale);
   const outH = even(p.canvas.height * p.exportScale);
-  const length = p.trim.out - p.trim.in;
+  const length = keptLength(p.trim, p.cuts);
 
   const render = async () => {
     const video = getVideo(p.recording?.assetId);
@@ -36,6 +37,7 @@ export function ExportPanel() {
         project: useProject.getState(),
         video: video.blob,
         trim: p.trim,
+        cuts: p.cuts,
         scale: p.exportScale,
         fps: p.exportFps,
         bitrate: p.exportBitrateMbps * 1e6,

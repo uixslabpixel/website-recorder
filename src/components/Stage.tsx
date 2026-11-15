@@ -43,7 +43,7 @@ export function Stage() {
       const p = useProject.getState();
       const ui = useUi.getState();
       if (p.recording) {
-        const t = tickPlayer(p.trim, ui.playing);
+        const t = tickPlayer(p.trim, p.cuts, ui.playing);
         if (Math.abs(t - ui.time) > 0.001) ui.setTime(t);
       }
       const frame = currentFrame();

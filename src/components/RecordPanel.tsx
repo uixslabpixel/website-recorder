@@ -58,15 +58,16 @@ export function RecordPanel() {
     p.set({ url });
     abortRef.current = new AbortController();
     try {
-      // Not awaited before this call: the popup and the share dialog both need this click.
-      const result = await recordWebsite({
+      const opts = {
         url,
         viewport: p.viewport,
         seconds: p.recordSeconds,
         hideCursor: p.hideCursor,
         onPhase: setPhase,
         signal: abortRef.current.signal,
-      });
+      };
+      // Not awaited before this call: the popup and the share dialog both need this click.
+      const result = await recordWebsite(opts);
       setPhase({ name: 'finishing' });
       await adopt(result.blob, { displaySurface: result.info.displaySurface, cursor: result.info.cursor });
       setWarnings(result.warnings);

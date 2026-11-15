@@ -1,3 +1,4 @@
+import { keptLength, keptSegments, outputToSource, type Range } from './edit';
 import {
   MATROSKA,
   MP4,
@@ -19,6 +20,8 @@ export interface RenderOptions {
   project: CompositionProject;
   video: Blob;
   trim: { in: number; out: number };
+  /** Ranges removed from inside the trim. */
+  cuts?: Range[];
   /** Output size multiplier relative to the project canvas (1 = full size). */
   scale: number;
   fps: number;
@@ -51,7 +54,8 @@ export async function renderProject(opts: RenderOptions): Promise<RenderResult> 
   // H.264 needs even dimensions.
   const width = even(project.canvas.width * opts.scale);
   const height = even(project.canvas.height * opts.scale);
-  const frames = Math.max(1, Math.round((trim.out - trim.in) * fps));
+  const segments = keptSegments(trim, opts.cuts ?? []);
+  const frames = Math.max(1, Math.round(keptLength(trim, opts.cuts ?? []) * fps));
 
   const codec = await pickOutputCodec(width, height, bitrate);
   if (!codec) throw new Error('This browser cannot encode video (WebCodecs is unavailable). Use a recent Chrome or Edge.');
@@ -77,13 +81,18 @@ export async function renderProject(opts: RenderOptions): Promise<RenderResult> 
     await output.start();
     started = true;
 
-    const timestamps = Array.from({ length: frames }, (_, i) => origin + trim.in + i / fps);
+    const timestamps = Array.from({ length: frames }, (_, i) => origin + outputToSource(i / fps, segments));
     let i = 0;
+    let last: OffscreenCanvas | null = null;
     for await (const decoded of sink.canvasesAtTimestamps(timestamps)) {
       if (signal?.aborted) throw new DOMException('Render cancelled', 'AbortError');
-      const frame = decoded
-        ? { image: decoded.canvas, width: decoded.canvas.width, height: decoded.canvas.height }
-        : null;
+      // The sink can miss a timestamp (e.g. right after a cut); repeat the previous frame instead of black.
+      if (decoded) {
+        const src = decoded.canvas;
+        if (!last || last.width !== src.width || last.height !== src.height) last = new OffscreenCanvas(src.width, src.height);
+        last.getContext('2d')!.drawImage(src, 0, 0);
+      }
+      const frame = last ? { image: last, width: last.width, height: last.height } : null;
       drawComposition(ctx, project, frame, width, height);
       await source.add(i / fps, 1 / fps);
       i++;

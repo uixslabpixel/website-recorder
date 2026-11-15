@@ -59,6 +59,8 @@ export interface Project {
 
   recording: Recording | null;
   trim: { in: number; out: number };
+  /** Ranges removed from the middle of the trim, in recording seconds, sorted, non-overlapping. */
+  cuts: { start: number; end: number }[];
 
   exportScale: number;
   exportFps: number;
@@ -102,6 +104,7 @@ const defaults: Project = {
   order: [RECORDING_LAYER_ID],
   recording: null,
   trim: { in: 0, out: 0 },
+  cuts: [],
   exportScale: 1,
   exportFps: 60,
   exportBitrateMbps: 20,
@@ -114,6 +117,10 @@ interface Actions {
   setRecordingLayer: (patch: Partial<RecordingLayer>) => void;
   setRecording: (recording: Recording | null) => void;
   setTrim: (patch: Partial<Project['trim']>) => void;
+  /** Adds a cut, merging it with any it overlaps; returns its index. */
+  addCut: (start: number, end: number) => number;
+  updateCut: (index: number, patch: Partial<{ start: number; end: number }>) => void;
+  removeCut: (index: number) => void;
   addImageLayer: (assetId: string, name: string) => string;
   updateImageLayer: (id: string, patch: Partial<ImageLayer>) => void;
   removeImageLayer: (id: string) => void;
@@ -128,7 +135,7 @@ export const useProject = create<Project & Actions>()(
       set: (patch) => set(patch),
       setRecordingLayer: (patch) => set((s) => ({ recordingLayer: { ...s.recordingLayer, ...patch } })),
       setRecording: (recording) =>
-        set({ recording, trim: { in: 0, out: recording ? recording.duration : 0 } }),
+        set({ recording, cuts: [], trim: { in: 0, out: recording ? recording.duration : 0 } }),
       setTrim: (patch) =>
         set((s) => {
           const duration = s.recording?.duration ?? 0;
@@ -142,6 +149,48 @@ export const useProject = create<Project & Actions>()(
           }
           return { trim: { in: a, out: b } };
         }),
+      addCut: (start, end) => {
+        let index = 0;
+        set((s) => {
+          const duration = s.recording?.duration ?? 0;
+          let a = Math.max(0, Math.min(start, end));
+          let b = Math.min(duration, Math.max(start, end));
+          if (b - a < MIN_TRIM) b = Math.min(duration, a + MIN_TRIM);
+          const rest: { start: number; end: number }[] = [];
+          for (const c of s.cuts) {
+            if (c.end < a || c.start > b) rest.push(c);
+            else {
+              a = Math.min(a, c.start);
+              b = Math.max(b, c.end);
+            }
+          }
+          const cuts = [...rest, { start: a, end: b }].sort((x, y) => x.start - y.start);
+          index = cuts.findIndex((c) => c.start === a);
+          return { cuts };
+        });
+        return index;
+      },
+      updateCut: (index, patch) =>
+        set((s) => {
+          const c = s.cuts[index];
+          if (!c) return {};
+          const duration = s.recording?.duration ?? 0;
+          // Neighbours bound the cut, so cuts never overlap or swap order.
+          const lo = s.cuts[index - 1]?.end ?? 0;
+          const hi = s.cuts[index + 1]?.start ?? duration;
+          let a = patch.start ?? c.start;
+          let b = patch.end ?? c.end;
+          a = Math.min(Math.max(lo, a), hi - MIN_TRIM);
+          b = Math.max(Math.min(hi, b), lo + MIN_TRIM);
+          if (b - a < MIN_TRIM) {
+            if (patch.start !== undefined) a = b - MIN_TRIM;
+            else b = a + MIN_TRIM;
+          }
+          const cuts = [...s.cuts];
+          cuts[index] = { start: a, end: b };
+          return { cuts };
+        }),
+      removeCut: (index) => set((s) => ({ cuts: s.cuts.filter((_, i) => i !== index) })),
       addImageLayer: (assetId, name) => {
         const id = `img-${crypto.randomUUID()}`;
         set((s) => ({

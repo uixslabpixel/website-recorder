@@ -129,6 +129,57 @@ function paintPopup(popup: Window, big: string, small: string) {
 }
 
 /**
+ * When a window (not a tab) was shared, the frames include the popup's
+ * title/address bar. Redraw the stream through a canvas that keeps only
+ * the page area, so the recording looks like a tab capture.
+ */
+function cropToPage(stream: MediaStream, popup: Window): { stream: MediaStream; stop: () => void } | null {
+  const track = stream.getVideoTracks()[0];
+  const { width: fw, height: fh } = track.getSettings();
+  let outerW: number, outerH: number, innerW: number, innerH: number;
+  try {
+    outerW = popup.outerWidth;
+    outerH = popup.outerHeight;
+    innerW = popup.innerWidth;
+    innerH = popup.innerHeight;
+  } catch {
+    return null;
+  }
+  if (!fw || !fh || !outerW || !outerH || outerH <= innerH) return null;
+  const scale = fh / outerH;
+  const sw = Math.round(innerW * scale);
+  const sh = Math.round(innerH * scale);
+  const sx = Math.max(0, Math.round((fw - sw) / 2));
+  const sy = Math.max(0, fh - sh); // browser chrome sits on top; page is bottom-aligned
+
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = stream;
+  void video.play();
+  const canvas = document.createElement('canvas');
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext('2d')!;
+  let raf = 0;
+  const draw = () => {
+    if (video.readyState >= 2) ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+    raf = requestAnimationFrame(draw);
+  };
+  draw();
+  const out = canvas.captureStream(60);
+  out.getVideoTracks()[0].contentHint = 'detail';
+  return {
+    stream: out,
+    stop: () => {
+      cancelAnimationFrame(raf);
+      out.getTracks().forEach((t) => t.stop());
+      video.srcObject = null;
+    },
+  };
+}
+
+/**
  * Records a website in one go. Must be called directly from a click.
  *
  * The popup starts small and blank so it does not cover the browser's tab
@@ -151,6 +202,10 @@ export async function recordWebsite(opts: CaptureOptions): Promise<CaptureResult
     video: {
       displaySurface: 'browser',
       frameRate: { ideal: 60 },
+      // Without a size Chrome may capture tabs at a scaled-down default; ask for Retina pixels.
+      width: { ideal: Math.round(viewport.width * (window.devicePixelRatio || 1)) },
+      height: { ideal: Math.round(viewport.height * (window.devicePixelRatio || 1)) },
+      resizeMode: 'none',
       cursor: hideCursor ? 'never' : 'always',
     },
     audio: false,
@@ -209,6 +264,8 @@ export async function recordWebsite(opts: CaptureOptions): Promise<CaptureResult
   }
 
   const track = stream.getVideoTracks()[0];
+  // Website text: keep resolution sharp and drop frames instead when the encoder is busy.
+  track.contentHint = 'detail';
   const settings = track.getSettings() as MediaTrackSettings & { cursor?: string };
   const info: CaptureInfo = {
     displaySurface: settings.displaySurface,
@@ -220,7 +277,7 @@ export async function recordWebsite(opts: CaptureOptions): Promise<CaptureResult
   };
 
   const warnings: string[] = [];
-  if (info.displaySurface && info.displaySurface !== 'browser') {
+  if (info.displaySurface === 'monitor') {
     warnings.push(
       `You shared a ${info.displaySurface === 'monitor' ? 'whole screen' : 'window'} instead of a tab, so the recording includes browser chrome. Record again and choose the “pick this tab” entry under “Tab”.`,
     );
@@ -229,6 +286,7 @@ export async function recordWebsite(opts: CaptureOptions): Promise<CaptureResult
     warnings.push('This browser did not honor the “hide cursor” option for this capture, so the cursor may be visible.');
   }
 
+  let stopCrop: (() => void) | undefined;
   try {
     if (popup.closed) throw new CaptureError('popup-closed', 'The website window was closed before the recording started.');
 
@@ -272,6 +330,10 @@ export async function recordWebsite(opts: CaptureOptions): Promise<CaptureResult
       /* cannot read the size */
     }
 
+    // Measure while the popup is still our page: once it shows the site, its size is cross-origin.
+    const cropped = info.displaySurface === 'window' ? cropToPage(stream, popup) : null;
+    if (cropped) stopCrop = cropped.stop;
+
     popup.location.replace(url);
     // Skip the blank flash of the navigation itself; slower loading is left for the trim handles.
     await sleep(600);
@@ -281,7 +343,7 @@ export async function recordWebsite(opts: CaptureOptions): Promise<CaptureResult
     info.height = live.height ?? info.height;
     const dpr = window.devicePixelRatio || 1;
     const pixels = (info.width ?? viewport.width * dpr) * (info.height ?? viewport.height * dpr);
-    const recorder = new MediaRecorder(stream, {
+    const recorder = new MediaRecorder(cropped?.stream ?? stream, {
       mimeType,
       videoBitsPerSecond: Math.round(Math.min(80e6, Math.max(16e6, pixels * 12))),
     });
@@ -329,6 +391,7 @@ export async function recordWebsite(opts: CaptureOptions): Promise<CaptureResult
     if (!blob.size) throw new CaptureError('empty', 'The recording is empty. Try again and keep the website window open.');
     return { blob, info, warnings };
   } finally {
+    stopCrop?.();
     stream.getTracks().forEach((t) => t.stop());
     closePopup();
     window.focus();
