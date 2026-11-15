@@ -20,7 +20,7 @@ npm run dev
 3. **Interact** – that window grows to the viewport, counts down 3-2-1, then loads the website and records for the set duration before closing itself.
 4. **Edit** – canvas size (Dribbble 4:3 by default), solid/gradient/image background, recording scale/position/radius/shadow, extra image layers with ordering. Drag layers on the canvas.
 5. **Trim** – drag the timeline handles; only in/out points are stored.
-6. **Export** – frames are composited and encoded with WebCodecs to H.264 MP4 at 60fps. Size can be reduced (75/50/25%) and bitrate adjusted. The same menu exports an animated GIF (half size and 20fps by default, since GIFs are limited to 256 colours and grow fast).
+6. **Export** – frames are composited and encoded with WebCodecs to H.264 MP4 at 60fps. Size can be reduced (75/50/25%), and the MP4 is sized either by bitrate or by a maximum file size in MB: the bitrate is worked out from the clip length, and the export is rendered again at a lower bitrate if it comes out over. The same menu exports an animated GIF (half size and 20fps by default, since GIFs are limited to 256 colours and grow fast).
 
 An existing video file can be imported instead of recording. The project (settings, recording, images) is saved locally in the browser and survives a refresh.
 
