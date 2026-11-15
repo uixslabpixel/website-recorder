@@ -13,7 +13,10 @@ const sample = readFileSync('artifact/sample.webm').toString('base64');
 
 writeFileSync(
   'artifact/website-recorder.html',
-  `<title>Website Recorder</title>
+  `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Website Recorder</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>${read('.css')}</style>
 <div id="root"></div>
