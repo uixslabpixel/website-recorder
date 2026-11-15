@@ -16,8 +16,8 @@ npm run dev
 ## How it works
 
 1. **Setup** – enter a URL, viewport (default 1680×900) and duration (default 5s).
-2. **Open website** – the site opens in a popup sized to the viewport. Get it into the state you want.
-3. **Record** – pick the popup under *Tab* in the browser's share dialog. After a 3-2-1 countdown the popup comes to the front and is recorded for the set duration, then closes.
+2. **Record** – one click. A small window opens and the browser asks what to share; pick the tab named *Website Recorder: pick this tab*.
+3. **Interact** – that window grows to the viewport, counts down 3-2-1, then loads the website and records for the set duration before closing itself.
 4. **Edit** – canvas size (Dribbble 4:3 by default), solid/gradient/image background, recording scale/position/radius/shadow, extra image layers with ordering. Drag layers on the canvas.
 5. **Trim** – drag the timeline handles; only in/out points are stored.
 6. **Export** – frames are composited and encoded with WebCodecs to H.264 MP4 at 60fps. Size can be reduced (75/50/25%) and bitrate adjusted.

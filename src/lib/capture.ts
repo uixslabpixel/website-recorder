@@ -56,21 +56,6 @@ export function viewportFits(width: number, height: number) {
   return width <= max.width && height <= max.height;
 }
 
-const POPUP_NAME = 'website-recorder-target';
-
-/** Must be called from a user gesture, otherwise the popup blocker rejects it. */
-export function openTargetPopup(url: string, width: number, height: number): Window {
-  const s = screen as ScreenWithAvail;
-  const left = Math.round((s.availLeft ?? 0) + Math.max(0, (screen.availWidth - width) / 2));
-  const top = Math.round((s.availTop ?? 0) + Math.max(0, (screen.availHeight - height) / 4));
-  // No `noopener`: the handle is needed to focus and close the popup later.
-  const popup = window.open(url, POPUP_NAME, `popup=yes,width=${width},height=${height},left=${left},top=${top}`);
-  if (!popup) {
-    throw new CaptureError('popup-blocked', 'The browser blocked the popup. Allow popups for this site and try again.');
-  }
-  return popup;
-}
-
 export interface CaptureInfo {
   displaySurface?: string;
   cursor?: string;
@@ -86,13 +71,19 @@ export interface CaptureResult {
   warnings: string[];
 }
 
+export type CapturePhase =
+  | { name: 'picking' }
+  | { name: 'countdown'; left: number }
+  | { name: 'recording'; elapsed: number; total: number }
+  | { name: 'finishing' };
+
 export interface CaptureOptions {
-  popup: Window;
+  url: string;
   viewport: { width: number; height: number };
   seconds: number;
   hideCursor: boolean;
   countdown?: number;
-  onPhase: (phase: { name: 'picking' } | { name: 'countdown'; left: number } | { name: 'recording'; elapsed: number; total: number } | { name: 'finishing' }) => void;
+  onPhase: (phase: CapturePhase) => void;
   signal?: AbortSignal;
 }
 
@@ -117,52 +108,107 @@ interface FocusController {
 }
 declare const CaptureController: (new () => FocusController) | undefined;
 
-export async function captureTab(opts: CaptureOptions): Promise<CaptureResult> {
-  const { popup, viewport, seconds, hideCursor, onPhase, signal } = opts;
+const POPUP_NAME = 'website-recorder-target';
+export const PICK_TITLE = 'Website Recorder: pick this tab';
+
+/** Fills the still-blank popup with our own page: first "pick me" instructions, later the countdown. */
+function paintPopup(popup: Window, big: string, small: string) {
+  const doc = popup.document;
+  doc.title = PICK_TITLE;
+  doc.body.style.cssText =
+    'margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;' +
+    'background:#0f0f12;color:#ececf1;font-family:system-ui,sans-serif;text-align:center;padding:0 24px;box-sizing:border-box';
+  doc.body.innerHTML = '';
+  const h = doc.createElement('div');
+  h.textContent = big;
+  h.style.cssText = `font-weight:700;line-height:1;font-size:${big.length <= 2 ? '160px' : '20px'}`;
+  const s = doc.createElement('div');
+  s.textContent = small;
+  s.style.cssText = 'color:#9a9aa8;font-size:14px;max-width:420px';
+  doc.body.append(h, s);
+}
+
+/**
+ * Records a website in one go. Must be called directly from a click.
+ *
+ * The popup starts small and blank so it does not cover the browser's tab
+ * picker. Once its tab is picked it grows to the viewport, shows the
+ * countdown itself, and only then loads the website.
+ */
+export async function recordWebsite(opts: CaptureOptions): Promise<CaptureResult> {
+  const { url, viewport, seconds, hideCursor, onPhase, signal } = opts;
   if (!captureSupported()) {
     throw new CaptureError('unsupported', 'This browser cannot record tabs. Use Chrome or Edge on desktop.');
   }
-  if (popup.closed) throw new CaptureError('popup-closed', 'The website window was closed. Open it again.');
   const mimeType = pickMimeType();
   if (!mimeType) throw new CaptureError('no-recorder', 'No supported recording format in this browser.');
 
-  const dpr = window.devicePixelRatio || 1;
   const controller = typeof CaptureController !== 'undefined' ? new CaptureController() : undefined;
+
+  // Both calls need the click's user activation, so neither may be awaited before the other starts.
+  // Several of the options are Chrome-only hints that steer the picker towards tabs.
+  const streamPromise = navigator.mediaDevices.getDisplayMedia({
+    video: {
+      displaySurface: 'browser',
+      frameRate: { ideal: 60 },
+      cursor: hideCursor ? 'never' : 'always',
+    },
+    audio: false,
+    selfBrowserSurface: 'exclude',
+    surfaceSwitching: 'exclude',
+    monitorTypeSurfaces: 'exclude',
+    preferCurrentTab: false,
+    controller,
+  } as DisplayMediaStreamOptions);
+
+  const s = screen as ScreenWithAvail;
+  const availLeft = s.availLeft ?? 0;
+  const availTop = s.availTop ?? 0;
+  const small = { w: 460, h: 260 };
+  // No `noopener`: the handle is needed to resize, navigate and close the popup.
+  const popup = window.open(
+    '',
+    POPUP_NAME,
+    `popup=yes,width=${small.w},height=${small.h},left=${availLeft + screen.availWidth - small.w - 24},top=${availTop + screen.availHeight - small.h - 80}`,
+  );
+  if (!popup) {
+    void streamPromise.then((st) => st.getTracks().forEach((t) => t.stop())).catch(() => {});
+    throw new CaptureError('popup-blocked', 'The browser blocked the popup. Allow popups for this site and try again.');
+  }
+  const closePopup = () => {
+    try {
+      popup.close();
+    } catch {
+      /* already gone */
+    }
+  };
+  try {
+    paintPopup(popup, 'Pick this tab', `In the share dialog, choose the tab named “${PICK_TITLE}”, then click Share.`);
+  } catch {
+    /* A stale popup from an earlier run that already navigated away; it still works as a target. */
+  }
 
   onPhase({ name: 'picking' });
   let stream: MediaStream;
   try {
-    // Several of these are Chrome-only hints that steer the picker towards tabs.
-    stream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        displaySurface: 'browser',
-        frameRate: { ideal: 60 },
-        cursor: hideCursor ? 'never' : 'always',
-      },
-      audio: false,
-      selfBrowserSurface: 'exclude',
-      surfaceSwitching: 'exclude',
-      monitorTypeSurfaces: 'exclude',
-      preferCurrentTab: false,
-      controller,
-    } as DisplayMediaStreamOptions);
+    stream = await streamPromise;
   } catch (err) {
+    closePopup();
     const name = (err as DOMException)?.name;
     if (name === 'NotAllowedError' || name === 'AbortError') {
-      throw new CaptureError('permission-denied', 'Recording was cancelled or permission was denied. Click Record and pick the website tab.');
+      throw new CaptureError('permission-denied', 'Recording was cancelled or permission was denied. Click Record and pick the small “pick this tab” window in the dialog.');
     }
     throw new CaptureError('failed', `Could not start the capture: ${(err as Error)?.message ?? err}`);
   }
 
-  // Keep focus on this app during the countdown; must be set right after the promise resolves.
+  // Bring the picked tab (the popup) to the front; must be set right after the promise resolves.
   try {
-    controller?.setFocusBehavior?.('no-focus-change');
+    controller?.setFocusBehavior?.('focus-captured-surface');
   } catch {
     /* Not a tab/window capture, or decided too late. */
   }
 
   const track = stream.getVideoTracks()[0];
-  const stopStream = () => stream.getTracks().forEach((t) => t.stop());
   const settings = track.getSettings() as MediaTrackSettings & { cursor?: string };
   const info: CaptureInfo = {
     displaySurface: settings.displaySurface,
@@ -176,7 +222,7 @@ export async function captureTab(opts: CaptureOptions): Promise<CaptureResult> {
   const warnings: string[] = [];
   if (info.displaySurface && info.displaySurface !== 'browser') {
     warnings.push(
-      `You shared a ${info.displaySurface === 'monitor' ? 'whole screen' : 'window'} instead of a tab, so the recording includes browser chrome. Record again and choose the website under “Tab”.`,
+      `You shared a ${info.displaySurface === 'monitor' ? 'whole screen' : 'window'} instead of a tab, so the recording includes browser chrome. Record again and choose the “pick this tab” entry under “Tab”.`,
     );
   }
   if (hideCursor && info.cursor !== 'never') {
@@ -184,28 +230,56 @@ export async function captureTab(opts: CaptureOptions): Promise<CaptureResult> {
   }
 
   try {
+    if (popup.closed) throw new CaptureError('popup-closed', 'The website window was closed before the recording started.');
+
+    // Grow the popup so its page area is exactly the viewport, while it is still our own blank page.
+    try {
+      const dw = popup.outerWidth - popup.innerWidth;
+      const dh = popup.outerHeight - popup.innerHeight;
+      const outerW = viewport.width + dw;
+      const outerH = viewport.height + dh;
+      popup.moveTo(
+        Math.round(availLeft + Math.max(0, (screen.availWidth - outerW) / 2)),
+        Math.round(availTop + Math.max(0, (screen.availHeight - outerH) / 2)),
+      );
+      popup.resizeTo(outerW, outerH);
+    } catch {
+      /* Sizing is best effort; the check below reports the real size. */
+    }
+    popup.focus();
+
     const total = opts.countdown ?? 3;
     for (let left = total; left > 0; left--) {
       onPhase({ name: 'countdown', left });
+      try {
+        paintPopup(popup, String(left), 'The website loads and recording starts when this reaches zero.');
+      } catch {
+        /* popup navigated away already */
+      }
       await sleep(1000);
       if (signal?.aborted) throw new CaptureError('permission-denied', 'Recording cancelled.');
       if (track.readyState === 'ended') throw new CaptureError('permission-denied', 'Sharing was stopped before the recording started.');
       if (popup.closed) throw new CaptureError('popup-closed', 'The website window was closed before the recording started.');
     }
 
-    // Report the size once frames are flowing; before that it can be the ideal, not the real one.
+    try {
+      const w = popup.innerWidth;
+      const h = popup.innerHeight;
+      if (Math.abs(w - viewport.width) > 2 || Math.abs(h - viewport.height) > 2) {
+        warnings.push(`The website window ended up ${w}×${h} instead of ${viewport.width}×${viewport.height}, most likely because it does not fit on this screen.`);
+      }
+    } catch {
+      /* cannot read the size */
+    }
+
+    popup.location.replace(url);
+    // Skip the blank flash of the navigation itself; slower loading is left for the trim handles.
+    await sleep(600);
+
     const live = track.getSettings();
     info.width = live.width ?? info.width;
     info.height = live.height ?? info.height;
-    if (info.displaySurface === 'browser' && info.width && info.height) {
-      const expectedAspect = viewport.width / viewport.height;
-      if (Math.abs(info.width / info.height - expectedAspect) / expectedAspect > 0.03) {
-        warnings.push(
-          `The captured tab is ${info.width}×${info.height}, which does not match the ${viewport.width}×${viewport.height} viewport. The popup was probably clamped to your screen, or a different tab was picked.`,
-        );
-      }
-    }
-
+    const dpr = window.devicePixelRatio || 1;
     const pixels = (info.width ?? viewport.width * dpr) * (info.height ?? viewport.height * dpr);
     const recorder = new MediaRecorder(stream, {
       mimeType,
@@ -218,7 +292,6 @@ export async function captureTab(opts: CaptureOptions): Promise<CaptureResult> {
       recorder.onerror = (e) => reject(new CaptureError('failed', `Recorder error: ${(e as ErrorEvent).message ?? 'unknown'}`));
     });
 
-    popup.focus();
     recorder.start(1000);
     const startedAt = performance.now();
     let endedEarly = false;
@@ -237,8 +310,9 @@ export async function captureTab(opts: CaptureOptions): Promise<CaptureResult> {
         const elapsed = (performance.now() - startedAt) / 1000;
         onPhase({ name: 'recording', elapsed: Math.min(elapsed, seconds), total: seconds });
         if (elapsed >= seconds) finish();
-        else if (popup.closed) onEnded();
       }, 50);
+      // Closing the tab ends the track. `popup.closed` is not used here: sites that
+      // isolate themselves (COOP) make the handle look closed while the tab is alive.
       track.addEventListener('ended', onEnded);
       signal?.addEventListener('abort', finish);
     });
@@ -247,13 +321,16 @@ export async function captureTab(opts: CaptureOptions): Promise<CaptureResult> {
     if (recorder.state !== 'inactive') recorder.stop();
     await stopped;
     if (endedEarly) warnings.push('The recording ended early because sharing stopped or the website window was closed.');
+    if (popup.closed && !endedEarly) {
+      warnings.push('This website cut its link to the recorder, so its window could not be closed automatically. Close it yourself.');
+    }
 
     const blob = new Blob(chunks, { type: mimeType.split(';')[0] });
     if (!blob.size) throw new CaptureError('empty', 'The recording is empty. Try again and keep the website window open.');
     return { blob, info, warnings };
   } finally {
-    stopStream();
-    if (!popup.closed) popup.close();
+    stream.getTracks().forEach((t) => t.stop());
+    closePopup();
     window.focus();
   }
 }

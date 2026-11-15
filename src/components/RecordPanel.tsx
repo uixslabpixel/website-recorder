@@ -3,10 +3,9 @@ import { putAsset, removeAsset } from '../lib/assets';
 import {
   CaptureError,
   captureSupported,
-  captureTab,
   maxViewport,
   normalizeUrl,
-  openTargetPopup,
+  recordWebsite,
   viewportFits,
 } from '../lib/capture';
 import { HOSTED } from '../lib/env';
@@ -16,7 +15,6 @@ import { Field, Notice, Num, Section } from './controls';
 
 type Phase =
   | { name: 'idle' }
-  | { name: 'ready' }
   | { name: 'picking' }
   | { name: 'countdown'; left: number }
   | { name: 'recording'; elapsed: number; total: number }
@@ -28,26 +26,13 @@ export function RecordPanel() {
   const [phase, setPhase] = useState<Phase>({ name: 'idle' });
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const popupRef = useRef<Window | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const url = normalizeUrl(p.url);
   const fits = viewportFits(p.viewport.width, p.viewport.height);
   const supported = captureSupported();
-  const busy = phase.name !== 'idle' && phase.name !== 'ready';
-
-  // Notice when the user closes the popup themselves.
-  useEffect(() => {
-    if (phase.name !== 'ready') return;
-    const timer = setInterval(() => {
-      if (popupRef.current?.closed) {
-        popupRef.current = null;
-        setPhase({ name: 'idle' });
-      }
-    }, 500);
-    return () => clearInterval(timer);
-  }, [phase.name]);
+  const busy = phase.name !== 'idle';
 
   useEffect(() => {
     const title = document.title;
@@ -66,42 +51,29 @@ export function RecordPanel() {
     if (previous) void removeAsset(previous);
   };
 
-  const openSite = () => {
-    setError(null);
-    if (!url) return setError('Enter a valid http(s) URL first.');
-    try {
-      popupRef.current = openTargetPopup(url, p.viewport.width, p.viewport.height);
-      p.set({ url });
-      setPhase({ name: 'ready' });
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  };
-
   const record = async () => {
-    const popup = popupRef.current;
-    if (!popup || popup.closed) return openSite();
     setError(null);
     setWarnings([]);
+    if (!url) return setError('Enter a valid http(s) URL first.');
+    p.set({ url });
     abortRef.current = new AbortController();
     try {
-      const result = await captureTab({
-        popup,
+      // Not awaited before this call: the popup and the share dialog both need this click.
+      const result = await recordWebsite({
+        url,
         viewport: p.viewport,
         seconds: p.recordSeconds,
         hideCursor: p.hideCursor,
         onPhase: setPhase,
         signal: abortRef.current.signal,
       });
+      setPhase({ name: 'finishing' });
       await adopt(result.blob, { displaySurface: result.info.displaySurface, cursor: result.info.cursor });
       setWarnings(result.warnings);
     } catch (err) {
       setError(err instanceof CaptureError ? err.message : `Recording failed: ${(err as Error).message}`);
     } finally {
-      // captureTab always closes the popup when it returns or throws after the picker.
-      const stillOpen = popupRef.current && !popupRef.current.closed;
-      if (!stillOpen) popupRef.current = null;
-      setPhase(stillOpen ? { name: 'ready' } : { name: 'idle' });
+      setPhase({ name: 'idle' });
     }
   };
 
@@ -115,7 +87,7 @@ export function RecordPanel() {
     } catch (err) {
       setError(`Could not import “${file.name}”: ${(err as Error).message}`);
     } finally {
-      setPhase(popupRef.current && !popupRef.current.closed ? { name: 'ready' } : { name: 'idle' });
+      setPhase({ name: 'idle' });
     }
   };
 
@@ -139,7 +111,7 @@ export function RecordPanel() {
             disabled={busy}
             aria-invalid={p.url !== '' && !url}
             onChange={(e) => p.set({ url: e.target.value })}
-            onKeyDown={(e) => e.key === 'Enter' && phase.name === 'idle' && openSite()}
+            onKeyDown={(e) => e.key === 'Enter' && phase.name === 'idle' && void record()}
           />
         </Field>
         {p.url !== '' && !url && <Notice tone="error">That does not look like a valid http(s) address.</Notice>}
@@ -147,7 +119,7 @@ export function RecordPanel() {
         <Field label="Viewport">
           <select
             value={preset ? `${preset.width}x${preset.height}` : 'custom'}
-            disabled={busy || phase.name === 'ready'}
+            disabled={busy}
             onChange={(e) => {
               const v = VIEWPORT_PRESETS.find((x) => `${x.width}x${x.height}` === e.target.value);
               if (v) p.set({ viewport: { width: v.width, height: v.height } });
@@ -199,28 +171,23 @@ export function RecordPanel() {
           <>
         {!supported && <Notice tone="error">Tab recording needs Chrome or Edge on desktop. You can still import a video file below.</Notice>}
         <ol className="steps">
-          <li className={phase.name === 'idle' ? 'current' : 'done'}>Open the website in a popup and get it ready.</li>
-          <li className={phase.name === 'ready' || phase.name === 'picking' ? 'current' : ''}>
-            Click Record and pick the website under <b>Tab</b> in the browser dialog.
-          </li>
-          <li className={phase.name === 'countdown' || phase.name === 'recording' ? 'current' : ''}>
-            After 3-2-1 the popup comes to the front. Interact for {p.recordSeconds}s.
-          </li>
-        </ol>
-        {phase.name === 'idle' ? (
-          <button type="button" className="primary" disabled={!supported || !url} onClick={openSite}>
-            Open website
-          </button>
-        ) : (
-          <button type="button" className="primary record" disabled={busy} onClick={record}>
-            {phase.name === 'ready' ? '● Record' : phase.name === 'picking' ? 'Waiting for tab choice…' : phase.name === 'finishing' ? 'Processing…' : 'Recording…'}
-          </button>
-        )}
-        {phase.name === 'ready' && (
-          <button type="button" onClick={() => popupRef.current?.focus()}>
-            Show website window
-          </button>
-        )}
+              <li className={phase.name === 'idle' || phase.name === 'picking' ? 'current' : ''}>
+                Click Record. A small window opens and the browser asks what to share: pick <b>“Website Recorder: pick this tab”</b> under Tab.
+              </li>
+              <li className={phase.name === 'countdown' ? 'current' : ''}>That window grows to the viewport and counts down 3-2-1.</li>
+              <li className={phase.name === 'recording' ? 'current' : ''}>
+                The website loads in it. Interact for {p.recordSeconds}s; it closes by itself.
+              </li>
+            </ol>
+            <button type="button" className="primary record" disabled={!supported || !url || busy} onClick={record}>
+              {phase.name === 'idle'
+                ? '● Record'
+                : phase.name === 'picking'
+                  ? 'Waiting for tab choice…'
+                  : phase.name === 'finishing'
+                    ? 'Processing…'
+                    : 'Recording…'}
+            </button>
           </>
         )}
         {error && <Notice tone="error">{error}</Notice>}

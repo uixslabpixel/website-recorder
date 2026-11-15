@@ -73,8 +73,8 @@ Temuan spike capture (Chromium, diuji otomatis lewat Playwright):
 - Popup + tab capture + rekam + render MP4 berjalan end-to-end; tab terekam pada ukuran aslinya (viewport × device pixel ratio).
 - Constraint `width`/`height` di `getDisplayMedia` membuat Chrome mengubah skala hasil capture, jadi tidak dipakai.
 - Opsi hide cursor (`cursor: 'never'`) **tidak dihormati** Chromium untuk tab capture: track melaporkan `cursor: 'motion'`. Toggle tetap ada, dan app memberi peringatan kalau permintaannya diabaikan.
-- Flow dibuat dua langkah (Open website, lalu Record) karena popup yang baru dibuka mengambil fokus dan menutupi dialog pilih tab. Ini juga memberi kesempatan menyiapkan halaman sebelum merekam.
-- `setFocusBehavior('no-focus-change')` dipakai supaya app tetap di depan selama countdown; popup difokuskan saat rekaman mulai.
+- Flow satu klik: popup dibuka kecil dan kosong (halaman milik app) supaya tidak menutupi dialog pilih tab. Setelah tab dipilih, popup dibesarkan tepat seukuran viewport, menampilkan countdown 3-2-1 di dalamnya, lalu baru memuat website dan rekaman dimulai. Waktu loading halaman ikut terekam dan dipotong lewat trim.
+- Website dengan header COOP memutus hubungan popup dengan app; rekaman tetap jalan, tetapi popup harus ditutup manual (app memberi peringatan).
 
 ## Batasan
 
