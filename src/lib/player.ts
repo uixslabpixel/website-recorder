@@ -77,3 +77,8 @@ export function currentFrame() {
   }
   return { image: video, width: video.videoWidth, height: video.videoHeight };
 }
+
+/** Object URL of the loaded recording, for secondary readers like the hover thumbnail. */
+export function videoUrl() {
+  return currentUrl;
+}

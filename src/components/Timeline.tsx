@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { keptLength } from '../lib/edit';
 import { formatTime } from '../lib/media';
+import { HoverPreview } from './HoverPreview';
 import { pause, play, seek } from '../lib/player';
 import { useProject, useUi } from '../store';
 
@@ -18,6 +19,7 @@ export function Timeline() {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<Handle | null>(null);
   const [selectedCut, setSelectedCut] = useState<number | null>(null);
+  const [hover, setHover] = useState<{ t: number; x: number } | null>(null);
   const duration = recording?.duration ?? 0;
 
   const toggle = () => {
@@ -141,11 +143,23 @@ export function Timeline() {
         className="track"
         ref={trackRef}
         onPointerDown={start('playhead')}
-        onPointerMove={(e) => dragging.current && apply(dragging.current, timeAt(e.clientX))}
+        onPointerMove={(e) => {
+          if (dragging.current) {
+            apply(dragging.current, timeAt(e.clientX));
+            setHover(null);
+            return;
+          }
+          // Clamp so the thumbnail never pokes out past the track's ends.
+          const box = trackRef.current!.getBoundingClientRect();
+          const x = Math.min(Math.max(e.clientX - box.left, 80), box.width - 80);
+          setHover({ t: timeAt(e.clientX), x });
+        }}
+        onPointerLeave={() => setHover(null)}
         onPointerUp={() => (dragging.current = null)}
         onPointerCancel={() => (dragging.current = null)}
         onDragStart={(e) => e.preventDefault()}
       >
+        {hover && <HoverPreview time={hover.t} x={hover.x} aspect={recording.width / recording.height} />}
         <div className="range" style={{ left: pct(trim.in), width: pct(trim.out - trim.in) }} />
         {cuts.map((c, i) => (
           <div key={i} className={`cut${selectedCut === i ? ' selected' : ''}`} style={{ left: pct(c.start), width: pct(c.end - c.start) }}>
